@@ -2,12 +2,16 @@
 #include <SDL2/SDL_ttf.h>
 #include <iostream>
 #include <string>
+#include <time.h>
+#include <chrono>
+#include <algorithm>
 
 const int WINDOW_WIDTH = 904, WINDOW_HEIGHT = 800;
 const int PADDLE_SPACING_FROM_EDGE = 45;
-const int PADDLE_HEIGHT = WINDOW_HEIGHT * 0.05, PADDLE_WIDTH = WINDOW_WIDTH * 0.01;
-const int BALL_RADIUS = WINDOW_HEIGHT * 0.02;
+const float PADDLE_HEIGHT = WINDOW_HEIGHT * 0.05f, PADDLE_WIDTH = WINDOW_WIDTH * 0.01f;
+const float BALL_RADIUS = WINDOW_HEIGHT * 0.02f;
 const char* SCORE_FONT_LOCATION = "./src/fonts/pong-score.ttf";
+const float PADDLE_SPEED = 1.15f;
 
 // SDL variables
 SDL_Window* window;
@@ -16,13 +20,18 @@ SDL_Event event;
 TTF_Font *scoreFont;
 
 struct Paddle {
-  SDL_Rect rect {0, 0, PADDLE_WIDTH, PADDLE_HEIGHT};
+  SDL_FRect rect {0.0f, WINDOW_HEIGHT / 2.0f - PADDLE_HEIGHT / 2.0f, PADDLE_WIDTH, PADDLE_HEIGHT};
+  float velocity = 0.0f;
   int score = 0;
 } paddleLeft, paddleRight;
 
 struct Ball {
-  SDL_Rect rect {0, 0, BALL_RADIUS, BALL_RADIUS};
-  float velX = 0, velY = 0;
+  SDL_FRect rect {
+    WINDOW_WIDTH / 2.0f - BALL_RADIUS / 2.0f,
+    WINDOW_HEIGHT / 2.0f - BALL_RADIUS / 2.0f,
+    BALL_RADIUS, BALL_RADIUS
+  };
+  float velX = 0.0f, velY = 0.0f;
 } ball;
 
 // Draws the black back screen and net
@@ -46,9 +55,9 @@ void drawGameObjects() {
   SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
   
   // Draw paddles and ball
-  SDL_RenderFillRect(renderer, &paddleLeft.rect);
-  SDL_RenderFillRect(renderer, &paddleRight.rect);
-  SDL_RenderFillRect(renderer, &ball.rect);
+  SDL_RenderFillRectF(renderer, &paddleLeft.rect);
+  SDL_RenderFillRectF(renderer, &paddleRight.rect);
+  SDL_RenderFillRectF(renderer, &ball.rect);
 
   // Draw the scores
   const char* scoreTextLeft = std::to_string(paddleLeft.score).c_str();
@@ -70,6 +79,16 @@ void drawGameObjects() {
   SDL_FreeSurface(scoreSurfaceRight);
   SDL_DestroyTexture(scoreTextureLeft);
   SDL_DestroyTexture(scoreTextureRight);
+}
+
+void updatePaddlePosition(Paddle* paddle, float delta_time) {
+    paddle->rect.y -= 
+      paddle->velocity * delta_time + paddle->velocity * delta_time * delta_time * 0.5;
+    if (paddle->rect.y > WINDOW_HEIGHT - PADDLE_HEIGHT) {
+      paddle->rect.y = WINDOW_HEIGHT - PADDLE_HEIGHT;
+    } else if (paddle->rect.y < 0) {
+      paddle->rect.y = 0;
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -108,21 +127,17 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-
   paddleLeft.rect.x = PADDLE_SPACING_FROM_EDGE;
-  paddleLeft.rect.y = WINDOW_HEIGHT / 2 - PADDLE_HEIGHT / 2;
-  
   paddleRight.rect.x = WINDOW_WIDTH - PADDLE_SPACING_FROM_EDGE - PADDLE_WIDTH;
-  paddleRight.rect.y = paddleLeft.rect.y;
-  
-  ball.rect.x = WINDOW_WIDTH / 2 - BALL_RADIUS / 2;
-  ball.rect.y = WINDOW_HEIGHT / 2 - BALL_RADIUS / 2;
-  
+
 
   // Main game loop
   bool isPlaying = true;
+  float delta_time = 0.0f;
   while (isPlaying) {
-    while (SDL_PollEvent(&event) != 0) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) {
         isPlaying = false;
         // Clean up
@@ -130,13 +145,47 @@ int main(int argc, char *argv[]) {
         SDL_DestroyWindow(window);
         SDL_DestroyRenderer(renderer);
         SDL_Quit();
+      } else if (event.type == SDL_KEYDOWN) { // Change direction of paddle
+        switch (event.key.keysym.sym) {
+          case SDLK_w:
+            paddleLeft.velocity = PADDLE_SPEED;
+            break;
+          case SDLK_s:
+            paddleLeft.velocity = -PADDLE_SPEED;
+            break;
+          case SDLK_UP:
+            paddleRight.velocity = PADDLE_SPEED;
+            break;
+          case SDLK_DOWN:
+            paddleRight.velocity = -PADDLE_SPEED;
+            break;
+        }
+      } else if (event.type == SDL_KEYUP) { // Halt movement of paddle
+        switch (event.key.keysym.sym) {
+          case SDLK_w:
+          case SDLK_s:
+            paddleLeft.velocity = 0.0f;
+            break;
+          case SDLK_UP:
+          case SDLK_DOWN:
+            paddleRight.velocity = 0.0f;
+            break;
+        }
       }
     }
-    
+
+    // Update game object positions
+    updatePaddlePosition(&paddleLeft, delta_time);
+    updatePaddlePosition(&paddleRight, delta_time);
+
     drawBackground();
     drawGameObjects();
     SDL_RenderPresent(renderer);
+
+    auto stopTime = std::chrono::high_resolution_clock::now();
+	  delta_time = 
+      std::chrono::duration<float, std::chrono::milliseconds::period>(stopTime - startTime).count();
   }
- 
+
   return 0;
 }
