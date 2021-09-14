@@ -5,19 +5,24 @@
 #include <time.h>
 #include <chrono>
 #include <algorithm>
+#include <tgmath.h>
+
+#define PI 3.14159265
 
 const int WINDOW_WIDTH = 904, WINDOW_HEIGHT = 800;
-const int PADDLE_SPACING_FROM_EDGE = 45;
-const float PADDLE_HEIGHT = WINDOW_HEIGHT * 0.05f, PADDLE_WIDTH = WINDOW_WIDTH * 0.01f;
-const float BALL_RADIUS = WINDOW_HEIGHT * 0.02f;
 const char* SCORE_FONT_LOCATION = "./src/fonts/pong-score.ttf";
-const float PADDLE_SPEED = 1.15f;
+const float PADDLE_SPACING_FROM_EDGE = 45.0f;
+const float PADDLE_HEIGHT = WINDOW_HEIGHT * 0.07f, PADDLE_WIDTH = WINDOW_WIDTH * 0.01f;
+const float PADDLE_SPEED = 0.7f;
+const float BALL_RADIUS = WINDOW_HEIGHT * 0.01f;
+const float BALL_SPEED = 0.5f;
 
-// SDL variables
 SDL_Window* window;
 SDL_Renderer* renderer;
 SDL_Event event;
 TTF_Font *scoreFont;
+bool ballRespawning = false;
+float ballRespawnTime = 0.0f; // This keeps track of the time when the ball will respawn
 
 struct Paddle {
   SDL_FRect rect {0.0f, WINDOW_HEIGHT / 2.0f - PADDLE_HEIGHT / 2.0f, PADDLE_WIDTH, PADDLE_HEIGHT};
@@ -27,9 +32,9 @@ struct Paddle {
 
 struct Ball {
   SDL_FRect rect {
-    WINDOW_WIDTH / 2.0f - BALL_RADIUS / 2.0f,
-    WINDOW_HEIGHT / 2.0f - BALL_RADIUS / 2.0f,
-    BALL_RADIUS, BALL_RADIUS
+    WINDOW_WIDTH / 2.0f - BALL_RADIUS,
+    WINDOW_HEIGHT / 2.0f - BALL_RADIUS,
+    BALL_RADIUS * 2.0f, BALL_RADIUS * 2.0f
   };
   float velX = 0.0f, velY = 0.0f;
 } ball;
@@ -61,7 +66,7 @@ void drawGameObjects() {
 
   // Draw the scores
   const char* scoreTextLeft = std::to_string(paddleLeft.score).c_str();
-  const char* scoreTextRight = std::to_string(paddleLeft.score).c_str();
+  const char* scoreTextRight = std::to_string(paddleRight.score).c_str();
   SDL_Surface* scoreSurfaceLeft = 
     TTF_RenderText_Solid(scoreFont, scoreTextLeft, {255, 255, 255, 255});
   SDL_Surface* scoreSurfaceRight = 
@@ -91,6 +96,83 @@ void updatePaddlePosition(Paddle* paddle, float delta_time) {
     }
 }
 
+// Returns if 2 floating point Rects are colliding
+// Needed because SDL_HasIntersection only works with integer Rects
+bool areColliding(SDL_FRect r1, SDL_FRect r2) {
+  return
+    r1.x < r2.x + r2.w &&
+    r1.x + r1.w > r2.x &&
+    r1.y < r2.y + r2.h &&
+    r1.y + r1.h > r2.y;
+}
+
+// Respawns the ball at a random point with random velocity on the net after 3 seconds
+void respawnBall() {
+  // Set the ball off screen and set the ball respawn timer
+  if (!ballRespawning) {
+    ball.velX = 0;
+    ball.velY = 0;
+    ball.rect.x = -50;
+    ball.rect.y = -50;
+    ballRespawnTime = 3000;
+    ballRespawning = true;
+  } else { // Spawn in the ball
+    ballRespawning = false;
+    int randomNumber = rand();
+    double angle = randomNumber % 90 - 45; // -45 deg. to 45 deg. (prevents vertical start)
+    ball.velX = cos(angle) * BALL_SPEED * (randomNumber % 2 ? 1 : -1);
+    ball.velY = sin(angle) * BALL_SPEED;
+    ball.rect.x = WINDOW_WIDTH / 2.0f - BALL_RADIUS;
+    ball.rect.y = randomNumber % int(WINDOW_HEIGHT - BALL_RADIUS * 2) + BALL_RADIUS * 2.0f;
+  }
+}
+
+// Adjust ball velocity if it hits a paddle
+void paddleHitBall(bool leftPaddle) {
+  // How far from center of the paddle is the middle of the ball
+  float relativeBallPaddle = 
+    ((leftPaddle ? paddleLeft.rect.y : paddleRight.rect.y) + PADDLE_HEIGHT / 2)
+    - (ball.rect.y + BALL_RADIUS);
+  // Either edge of paddle is 1, middle of paddle is 0
+  float normalizedBallPaddle = relativeBallPaddle / (PADDLE_HEIGHT / 2);
+  float angle = normalizedBallPaddle * 45 * PI / 180.0f; // 75 deg is the max angle we want
+  // Ball goes faster if hit on edge, slower if in center
+  float speedMultiplier = 0.5 * sin(3 * normalizedBallPaddle - PI / 2) + 1.2;
+  ball.velX = speedMultiplier * BALL_SPEED * cos(angle) * (leftPaddle ? 1 : -1);
+  ball.velY = speedMultiplier * BALL_SPEED * sin(angle);
+}
+
+// Act based on if the ball collided with something
+void ballCollision() {
+  if (areColliding(ball.rect, paddleLeft.rect)) {
+    paddleHitBall(true);
+  }
+  else if (areColliding(ball.rect, paddleRight.rect)) {
+    paddleHitBall(false);
+  }
+  else if (ball.rect.y + BALL_RADIUS * 2 > WINDOW_HEIGHT || ball.rect.y < 0) { // Top or bottom of screen
+    ball.velY *= -1;
+    ball.rect.y += ball.velY > 0 ? -1 : 1;
+  }
+  else if (ball.rect.x < 0) { // Left side of screen
+    ++paddleRight.score;
+    respawnBall();
+  }
+  else if (ball.rect.x + BALL_RADIUS * 2 > WINDOW_WIDTH) { // Right side of screen
+    ++paddleLeft.score;
+    respawnBall();
+  }
+}
+
+void quit(bool* isPlaying) {
+  *isPlaying = false;
+  // Clean up
+  TTF_CloseFont(scoreFont);
+  SDL_DestroyWindow(window);
+  SDL_DestroyRenderer(renderer);
+  SDL_Quit();
+}
+
 int main(int argc, char *argv[]) {
   // Initializations
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -101,35 +183,30 @@ int main(int argc, char *argv[]) {
     std::cout << "TTF Initialization Failed";
     return 1;
   }
+  srand(time(0));
 
-
-  window = SDL_CreateWindow(
-    "Pong",
-    SDL_WINDOWPOS_CENTERED,
-    SDL_WINDOWPOS_CENTERED,
-    WINDOW_WIDTH, WINDOW_HEIGHT,
-    0
-  );
+  // SDL variable creations, if these fail the program should stop
+  window = SDL_CreateWindow("Pong", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    WINDOW_WIDTH, WINDOW_HEIGHT, 0);
   if (!window) {
     std::cout << "SDL Window Creation Failed";
     return 1;
   }
-
   renderer = SDL_CreateRenderer(window, -1, 0);
   if (!renderer) {
     std::cout << "SDL Renderer Creation Failed";
     return 1;
   }
-
   scoreFont = TTF_OpenFont(SCORE_FONT_LOCATION, 24);
   if (!scoreFont) {
     std::cout << "Opening Font File " << SCORE_FONT_LOCATION << " Failed";
     return 1;
   }
 
+  // Initialize the game objects
   paddleLeft.rect.x = PADDLE_SPACING_FROM_EDGE;
   paddleRight.rect.x = WINDOW_WIDTH - PADDLE_SPACING_FROM_EDGE - PADDLE_WIDTH;
-
+  respawnBall();
 
   // Main game loop
   bool isPlaying = true;
@@ -137,16 +214,15 @@ int main(int argc, char *argv[]) {
   while (isPlaying) {
     auto startTime = std::chrono::high_resolution_clock::now();
 
+    // Handle Input
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) {
-        isPlaying = false;
-        // Clean up
-        TTF_CloseFont(scoreFont);
-        SDL_DestroyWindow(window);
-        SDL_DestroyRenderer(renderer);
-        SDL_Quit();
-      } else if (event.type == SDL_KEYDOWN) { // Change direction of paddle
+        quit(&isPlaying);
+      } else if (event.type == SDL_KEYDOWN) {
         switch (event.key.keysym.sym) {
+          case SDLK_ESCAPE:
+            quit(&isPlaying);
+            break;
           case SDLK_w:
             paddleLeft.velocity = PADDLE_SPEED;
             break;
@@ -160,7 +236,7 @@ int main(int argc, char *argv[]) {
             paddleRight.velocity = -PADDLE_SPEED;
             break;
         }
-      } else if (event.type == SDL_KEYUP) { // Halt movement of paddle
+      } else if (event.type == SDL_KEYUP) {
         switch (event.key.keysym.sym) {
           case SDLK_w:
           case SDLK_s:
@@ -174,9 +250,20 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // Update game object positions
+    if (ballRespawning) {
+      ballRespawnTime -= delta_time;
+      if (ballRespawnTime < 0) {
+        respawnBall();
+      }
+    } else {
+      ballCollision();
+    }
+
+    // Update paddle and ball positions
     updatePaddlePosition(&paddleLeft, delta_time);
     updatePaddlePosition(&paddleRight, delta_time);
+    ball.rect.x += ball.velX * delta_time + ball.velX * delta_time * delta_time * 0.5;
+    ball.rect.y -= ball.velY * delta_time + ball.velY * delta_time * delta_time * 0.5;
 
     drawBackground();
     drawGameObjects();
