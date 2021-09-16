@@ -28,6 +28,7 @@ TTF_Font* scoreFont;
 Mix_Chunk* soundHitPaddle;
 Mix_Chunk* soundScore;
 Mix_Chunk* soundHitWall;
+bool leftSideServing;
 bool ballRespawning = false;
 float ballRespawnTime = 0.0f; // This keeps track of the time when the ball will respawn
 
@@ -134,7 +135,7 @@ void respawnBall() {
     ballRespawning = false;
     int randomNumber = rand();
     float angle = (randomNumber % 90 - 45) * PI / 180.0f; // -45 deg. to 45 deg. (prevents vertical start)
-    ball.velX = cos(angle) * BALL_SPEED * (randomNumber % 2 ? 1 : -1);
+    ball.velX = cos(angle) * BALL_SPEED * (leftSideServing ? 1 : -1);
     ball.velY = sin(angle) * BALL_SPEED;
     ball.rect.x = WINDOW_WIDTH / 2.0f - BALL_RADIUS;
     ball.rect.y = randomNumber % int(WINDOW_HEIGHT - BALL_RADIUS * 2) + BALL_RADIUS * 2.0f;
@@ -175,6 +176,7 @@ void ballCollision(bool playing) {
     if (playing) {
       ++paddleRight.score;
       Mix_PlayChannel(-1, soundScore, 0);
+      leftSideServing = false;
       respawnBall();
     } else {
       ball.velX *= -1;
@@ -185,6 +187,7 @@ void ballCollision(bool playing) {
     if (playing) {
       ++paddleLeft.score;
       Mix_PlayChannel(-1, soundScore, 0);
+      leftSideServing = true;
       respawnBall();
     } else {
       ball.velX *= -1;
@@ -246,6 +249,7 @@ int main(int argc, char *argv[]) {
   // Initialize the game objects
   paddleLeft.rect.x = PADDLE_SPACING_FROM_EDGE;
   paddleRight.rect.x = WINDOW_WIDTH - PADDLE_SPACING_FROM_EDGE - PADDLE_WIDTH;
+  leftSideServing = rand() % 2; // Random initial serve
   respawnBall();
 
   // Main game loop
