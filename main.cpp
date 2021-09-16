@@ -106,9 +106,9 @@ void updatePaddlePosition(Paddle* paddle, float delta_time) {
     }
 }
 
-void updateBallPosition(Ball* ball, float delta_time) {
-  ball->rect.x += ball->velX * delta_time;
-  ball->rect.y -= ball->velY * delta_time;
+void updateBallPosition(float delta_time) {
+  ball.rect.x += ball.velX * delta_time;
+  ball.rect.y -= ball.velY * delta_time;
 }
 
 // Returns if 2 floating point Rects are colliding
@@ -196,15 +196,6 @@ void ballCollision(bool playing) {
   }
 }
 
-void quit(bool* isPlaying) {
-  *isPlaying = false;
-  // Clean up
-  TTF_CloseFont(scoreFont);
-  SDL_DestroyWindow(window);
-  SDL_DestroyRenderer(renderer);
-  SDL_Quit();
-}
-
 int main(int argc, char *argv[]) {
   // Initializations
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
@@ -252,115 +243,121 @@ int main(int argc, char *argv[]) {
   leftSideServing = rand() % 2; // Random initial serve
   respawnBall();
 
-  // Main game loop
-  bool quitGame = false;
-  bool isPlaying = true;
+  bool gameRunning = true;
+  bool gameOver = false;
   float delta_time = 0.0f;
-  while (isPlaying) {
+  while (gameRunning) {
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    // Handle Input
-    while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_QUIT) {
-        quit(&isPlaying);
-        quitGame = true;
-      } else if (event.type == SDL_KEYDOWN) {
-        switch (event.key.keysym.sym) {
-          case SDLK_ESCAPE:
-            quit(&isPlaying);
-            quitGame = true;
-            break;
-          case SDLK_w:
-            paddleLeft.velocity = PADDLE_SPEED;
-            break;
-          case SDLK_s:
-            paddleLeft.velocity = -PADDLE_SPEED;
-            break;
-          case SDLK_UP:
-            paddleRight.velocity = PADDLE_SPEED;
-            break;
-          case SDLK_DOWN:
-            paddleRight.velocity = -PADDLE_SPEED;
-            break;
-        }
-      } else if (event.type == SDL_KEYUP) {
-        switch (event.key.keysym.sym) {
-          case SDLK_w:
-          case SDLK_s:
-            paddleLeft.velocity = 0.0f;
-            break;
-          case SDLK_UP:
-          case SDLK_DOWN:
-            paddleRight.velocity = 0.0f;
-            break;
+    if (!gameOver) { // Gameplay
+      // Handle Input
+      while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+          gameRunning = false;
+        } else if (event.type == SDL_KEYDOWN) {
+          switch (event.key.keysym.sym) {
+            case SDLK_ESCAPE:
+              gameRunning = false;
+              break;
+            case SDLK_r:
+              paddleLeft.score = 0;
+              paddleRight.score = 0;
+              leftSideServing = rand() % 2; // Random initial serve
+              ballRespawning = false;
+              respawnBall();
+              break;
+            case SDLK_w:
+              paddleLeft.velocity = PADDLE_SPEED;
+              break;
+            case SDLK_s:
+              paddleLeft.velocity = -PADDLE_SPEED;
+              break;
+            case SDLK_UP:
+              paddleRight.velocity = PADDLE_SPEED;
+              break;
+            case SDLK_DOWN:
+              paddleRight.velocity = -PADDLE_SPEED;
+              break;
+          }
+        } else if (event.type == SDL_KEYUP) {
+          switch (event.key.keysym.sym) {
+            case SDLK_w:
+            case SDLK_s:
+              paddleLeft.velocity = 0.0f;
+              break;
+            case SDLK_UP:
+            case SDLK_DOWN:
+              paddleRight.velocity = 0.0f;
+              break;
+          }
         }
       }
-    }
 
-    if (ballRespawning) {
-      ballRespawnTime -= delta_time;
-      if (ballRespawnTime < 0) {
+      if (ballRespawning) {
+        ballRespawnTime -= delta_time;
+        if (ballRespawnTime < 0) {
+          respawnBall();
+        }
+      } else {
+        ballCollision(true);
+      }
+
+      updatePaddlePosition(&paddleLeft, delta_time);
+      updatePaddlePosition(&paddleRight, delta_time);
+      updateBallPosition(delta_time);
+
+      drawBackground();
+      drawGameObjects(true);
+      SDL_RenderPresent(renderer);
+      
+      if (
+        (paddleLeft.score >= 11 || paddleRight.score >= 11)
+        && (paddleLeft.score > paddleRight.score + 1 || paddleLeft.score + 1 < paddleRight.score)
+      ) {
+        ballRespawning = true;
         respawnBall();
+        gameOver = true;
       }
-    } else {
-      ballCollision(true);
-    }
-
-    // Update paddle and ball positions
-    updatePaddlePosition(&paddleLeft, delta_time);
-    updatePaddlePosition(&paddleRight, delta_time);
-    updateBallPosition(&ball, delta_time);
-
-    drawBackground();
-    drawGameObjects(true);
-    SDL_RenderPresent(renderer);
-
-    auto stopTime = std::chrono::high_resolution_clock::now();
-	  delta_time = 
-      std::chrono::duration<float, std::chrono::milliseconds::period>(stopTime - startTime).count();
-
-    if (
-      (paddleLeft.score >= 11 || paddleRight.score >= 11)
-      && (paddleLeft.score > paddleRight.score + 1 || paddleLeft.score + 1 < paddleRight.score)
-    ) {
-      isPlaying = false;
-    }
-  }
-
-  // End-game screen
-  respawnBall();
-  isPlaying = true;
-  delta_time = 0.0f;
-  while (isPlaying && !quitGame) {
-    auto startTime = std::chrono::high_resolution_clock::now();
-
-    // Handle Input
-    while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_QUIT) {
-        quit(&isPlaying);
-      } else if (event.type == SDL_KEYDOWN) {
-        switch (event.key.keysym.sym) {
-          case SDLK_ESCAPE:
-            quit(&isPlaying);
-            break;
+    } else { // Game over screen
+      // Handle Input
+      while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+          gameRunning = false;
+        } else if (event.type == SDL_KEYDOWN) {
+          switch (event.key.keysym.sym) {
+            case SDLK_ESCAPE:
+              gameRunning = false;
+              break;
+            case SDLK_r:
+              paddleLeft.score = 0;
+              paddleRight.score = 0;
+              leftSideServing = rand() % 2; // Random initial serve
+              ballRespawning = false;
+              respawnBall();
+              gameOver = false;
+              break;
+          }
         }
       }
+      
+      ballCollision(false);
+
+      updateBallPosition(delta_time);
+
+      drawBackground();
+      drawGameObjects(false);
+      SDL_RenderPresent(renderer);
     }
     
-    ballCollision(false);
-
-    // Update ball position
-    ball.rect.x += ball.velX * delta_time + ball.velX * delta_time * delta_time * 0.5;
-    ball.rect.y -= ball.velY * delta_time + ball.velY * delta_time * delta_time * 0.5;
-
-    drawBackground();
-    drawGameObjects(false);
-    SDL_RenderPresent(renderer);
-
     auto stopTime = std::chrono::high_resolution_clock::now();
-	  delta_time = 
+    delta_time = 
       std::chrono::duration<float, std::chrono::milliseconds::period>(stopTime - startTime).count();
   }
+
+  TTF_CloseFont(scoreFont);
+  SDL_DestroyWindow(window);
+  SDL_DestroyRenderer(renderer);
+  SDL_Quit();
 
   return 0;
 }
