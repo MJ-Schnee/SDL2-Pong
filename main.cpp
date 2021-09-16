@@ -98,7 +98,7 @@ void drawGameObjects(bool renderPaddles) {
 
 void updatePaddlePosition(Paddle* paddle, float delta_time) {
     paddle->rect.y -= 
-      paddle->velocity * delta_time + paddle->velocity * delta_time * delta_time * 0.5;
+      paddle->velocity * delta_time;
     if (paddle->rect.y > WINDOW_HEIGHT - PADDLE_HEIGHT) {
       paddle->rect.y = WINDOW_HEIGHT - PADDLE_HEIGHT;
     } else if (paddle->rect.y < 0) {
@@ -107,8 +107,8 @@ void updatePaddlePosition(Paddle* paddle, float delta_time) {
 }
 
 void updateBallPosition(Ball* ball, float delta_time) {
-  ball->rect.x += ball->velX * delta_time + ball->velX * delta_time * delta_time * 0.5;
-  ball->rect.y -= ball->velY * delta_time + ball->velY * delta_time * delta_time * 0.5;
+  ball->rect.x += ball->velX * delta_time;
+  ball->rect.y -= ball->velY * delta_time;
 }
 
 // Returns if 2 floating point Rects are colliding
