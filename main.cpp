@@ -47,8 +47,8 @@ struct Ball {
   float velX = 0.0f, velY = 0.0f;
 } ball;
 
-// Draws the black back screen and net
-void drawBackground() {
+// Draws the background, net paddles, ball, and scores
+void drawGame(bool renderPaddles) {
   // Draw the black screen
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
   SDL_RenderClear(renderer);
@@ -61,10 +61,7 @@ void drawBackground() {
     netRect.y = y;
     SDL_RenderFillRect(renderer, &netRect);
   }
-}
 
-// Draws the paddles, ball, and scores
-void drawGameObjects(bool renderPaddles) {
   SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
   
   // Draw paddles and ball
@@ -85,10 +82,17 @@ void drawGameObjects(bool renderPaddles) {
   SDL_Texture* scoreTextureLeft = SDL_CreateTextureFromSurface(renderer, scoreSurfaceLeft);
   SDL_Texture* scoreTextureRight = SDL_CreateTextureFromSurface(renderer, scoreSurfaceRight);
   int scoreDistFromTop = 32, scoreWidth = 73, scoreHeight = 100;
-  SDL_Rect scoreRectLeft {217, scoreDistFromTop, scoreWidth, scoreHeight};
-  SDL_Rect scoreRectRight {811, scoreDistFromTop, scoreWidth, scoreHeight};
+  SDL_Rect scoreRectLeft {
+    paddleLeft.score < 10 ? 273 : 273 - scoreWidth, scoreDistFromTop,
+    paddleLeft.score < 10 ? scoreWidth : 2 * scoreWidth, scoreHeight
+  };
+  SDL_Rect scoreRectRight {
+    paddleRight.score < 10 ? 811 : 811 - scoreWidth, scoreDistFromTop,
+    paddleRight.score < 10 ? scoreWidth : 2 * scoreWidth, scoreHeight
+  };
   SDL_RenderCopy(renderer, scoreTextureLeft, NULL, &scoreRectLeft);
   SDL_RenderCopy(renderer, scoreTextureRight, NULL, &scoreRectRight);
+
   // Free the surface and destroy the texture since they aren't needed anymore
   SDL_FreeSurface(scoreSurfaceLeft);
   SDL_FreeSurface(scoreSurfaceRight);
@@ -306,14 +310,10 @@ int main(int argc, char *argv[]) {
       updatePaddlePosition(&paddleRight, delta_time);
       updateBallPosition(delta_time);
 
-      drawBackground();
-      drawGameObjects(true);
+      drawGame(true);
       SDL_RenderPresent(renderer);
       
-      if (
-        (paddleLeft.score >= 11 || paddleRight.score >= 11)
-        && (paddleLeft.score > paddleRight.score + 1 || paddleLeft.score + 1 < paddleRight.score)
-      ) {
+      if (paddleLeft.score >= 11 || paddleRight.score >= 11) {
         ballRespawning = true;
         respawnBall();
         gameOver = true;
@@ -344,8 +344,7 @@ int main(int argc, char *argv[]) {
 
       updateBallPosition(delta_time);
 
-      drawBackground();
-      drawGameObjects(false);
+      drawGame(false);
       SDL_RenderPresent(renderer);
     }
     
