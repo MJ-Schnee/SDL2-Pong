@@ -63,12 +63,14 @@ void drawBackground() {
 }
 
 // Draws the paddles, ball, and scores
-void drawGameObjects() {
+void drawGameObjects(bool renderPaddles) {
   SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
   
   // Draw paddles and ball
-  SDL_RenderFillRectF(renderer, &paddleLeft.rect);
-  SDL_RenderFillRectF(renderer, &paddleRight.rect);
+  if (renderPaddles) {
+    SDL_RenderFillRectF(renderer, &paddleLeft.rect);
+    SDL_RenderFillRectF(renderer, &paddleRight.rect);
+  }
   SDL_RenderFillRectF(renderer, &ball.rect);
 
   // Draw the scores
@@ -101,6 +103,11 @@ void updatePaddlePosition(Paddle* paddle, float delta_time) {
     } else if (paddle->rect.y < 0) {
       paddle->rect.y = 0;
     }
+}
+
+void updateBallPosition(Ball* ball, float delta_time) {
+  ball->rect.x += ball->velX * delta_time + ball->velX * delta_time * delta_time * 0.5;
+  ball->rect.y -= ball->velY * delta_time + ball->velY * delta_time * delta_time * 0.5;
 }
 
 // Returns if 2 floating point Rects are colliding
@@ -150,29 +157,39 @@ void paddleHitBall(bool leftPaddle) {
 }
 
 // Act based on if the ball collided with something
-void ballCollision() {
-  if (areColliding(ball.rect, paddleLeft.rect)) {
+void ballCollision(bool playing) {
+  if (playing && areColliding(ball.rect, paddleLeft.rect)) {
     Mix_PlayChannel(-1, soundHitPaddle, 0);
     paddleHitBall(true);
   }
-  else if (areColliding(ball.rect, paddleRight.rect)) {
+  else if (playing && areColliding(ball.rect, paddleRight.rect)) {
     Mix_PlayChannel(-1, soundHitPaddle, 0);
     paddleHitBall(false);
   }
   else if (ball.rect.y + BALL_RADIUS * 2 > WINDOW_HEIGHT || ball.rect.y < 0) { // Top or bottom of screen
-    Mix_PlayChannel(-1, soundHitWall, 0);
+    if (playing) Mix_PlayChannel(-1, soundHitWall, 0);
     ball.velY *= -1;
     ball.rect.y += ball.velY > 0 ? -1 : 1;
   }
   else if (ball.rect.x < 0) { // Left side of screen
-    ++paddleRight.score;
-    Mix_PlayChannel(-1, soundScore, 0);
-    respawnBall();
+    if (playing) {
+      ++paddleRight.score;
+      Mix_PlayChannel(-1, soundScore, 0);
+      respawnBall();
+    } else {
+      ball.velX *= -1;
+      ball.rect.x -= ball.velX > 0 ? -1 : 1;
+    }
   }
   else if (ball.rect.x + BALL_RADIUS * 2 > WINDOW_WIDTH) { // Right side of screen
-    ++paddleLeft.score;
-    Mix_PlayChannel(-1, soundScore, 0);
-    respawnBall();
+    if (playing) {
+      ++paddleLeft.score;
+      Mix_PlayChannel(-1, soundScore, 0);
+      respawnBall();
+    } else {
+      ball.velX *= -1;
+      ball.rect.x -= ball.velX > 0 ? -1 : 1;
+    }
   }
 }
 
@@ -232,6 +249,7 @@ int main(int argc, char *argv[]) {
   respawnBall();
 
   // Main game loop
+  bool quitGame = false;
   bool isPlaying = true;
   float delta_time = 0.0f;
   while (isPlaying) {
@@ -241,10 +259,12 @@ int main(int argc, char *argv[]) {
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) {
         quit(&isPlaying);
+        quitGame = true;
       } else if (event.type == SDL_KEYDOWN) {
         switch (event.key.keysym.sym) {
           case SDLK_ESCAPE:
             quit(&isPlaying);
+            quitGame = true;
             break;
           case SDLK_w:
             paddleLeft.velocity = PADDLE_SPEED;
@@ -279,17 +299,58 @@ int main(int argc, char *argv[]) {
         respawnBall();
       }
     } else {
-      ballCollision();
+      ballCollision(true);
     }
 
     // Update paddle and ball positions
     updatePaddlePosition(&paddleLeft, delta_time);
     updatePaddlePosition(&paddleRight, delta_time);
+    updateBallPosition(&ball, delta_time);
+
+    drawBackground();
+    drawGameObjects(true);
+    SDL_RenderPresent(renderer);
+
+    auto stopTime = std::chrono::high_resolution_clock::now();
+	  delta_time = 
+      std::chrono::duration<float, std::chrono::milliseconds::period>(stopTime - startTime).count();
+
+    if (
+      (paddleLeft.score >= 11 || paddleRight.score >= 11)
+      && (paddleLeft.score > paddleRight.score + 1 || paddleLeft.score + 1 < paddleRight.score)
+    ) {
+      isPlaying = false;
+    }
+  }
+
+  // End-game screen
+  respawnBall();
+  isPlaying = true;
+  delta_time = 0.0f;
+  while (isPlaying && !quitGame) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    // Handle Input
+    while (SDL_PollEvent(&event)) {
+      if (event.type == SDL_QUIT) {
+        quit(&isPlaying);
+      } else if (event.type == SDL_KEYDOWN) {
+        switch (event.key.keysym.sym) {
+          case SDLK_ESCAPE:
+            quit(&isPlaying);
+            break;
+        }
+      }
+    }
+    
+    ballCollision(false);
+
+    // Update ball position
     ball.rect.x += ball.velX * delta_time + ball.velX * delta_time * delta_time * 0.5;
     ball.rect.y -= ball.velY * delta_time + ball.velY * delta_time * delta_time * 0.5;
 
     drawBackground();
-    drawGameObjects();
+    drawGameObjects(false);
     SDL_RenderPresent(renderer);
 
     auto stopTime = std::chrono::high_resolution_clock::now();
