@@ -126,7 +126,7 @@ void respawnBall() {
   } else { // Spawn in the ball
     ballRespawning = false;
     int randomNumber = rand();
-    double angle = randomNumber % 90 - 45; // -45 deg. to 45 deg. (prevents vertical start)
+    float angle = (randomNumber % 90 - 45) * PI / 180.0f; // -45 deg. to 45 deg. (prevents vertical start)
     ball.velX = cos(angle) * BALL_SPEED * (randomNumber % 2 ? 1 : -1);
     ball.velY = sin(angle) * BALL_SPEED;
     ball.rect.x = WINDOW_WIDTH / 2.0f - BALL_RADIUS;
