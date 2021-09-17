@@ -20,6 +20,7 @@ const float PADDLE_HEIGHT = WINDOW_HEIGHT * 0.07f, PADDLE_WIDTH = WINDOW_WIDTH *
 const float PADDLE_SPEED = 0.7f;
 const float BALL_RADIUS = WINDOW_HEIGHT * 0.01f;
 const float BALL_SPEED = 0.5f;
+const float PADDLE_SPAWN_Y = WINDOW_HEIGHT / 2.0f - PADDLE_HEIGHT / 2.0f;
 
 SDL_Window* window;
 SDL_Renderer* renderer;
@@ -31,9 +32,10 @@ Mix_Chunk* soundHitWall;
 bool leftSideServing;
 bool ballRespawning = false;
 float ballRespawnTime = 0.0f; // This keeps track of the time when the ball will respawn
+bool player2Ai = true;
 
 struct Paddle {
-  SDL_FRect rect {0.0f, WINDOW_HEIGHT / 2.0f - PADDLE_HEIGHT / 2.0f, PADDLE_WIDTH, PADDLE_HEIGHT};
+  SDL_FRect rect {0.0f, PADDLE_SPAWN_Y, PADDLE_WIDTH, PADDLE_HEIGHT};
   float velocity = 0.0f;
   int score = 0;
 } paddleLeft, paddleRight;
@@ -200,18 +202,30 @@ void ballCollision(bool playing) {
   }
 }
 
+// Resets scores, serve, ball, and AI
+void restartGame() {
+  paddleLeft.score = 0;
+  paddleLeft.rect.y = PADDLE_SPAWN_Y;
+  paddleRight.score = 0;
+  paddleRight.rect.y = PADDLE_SPAWN_Y;
+  leftSideServing = rand() % 2; // Random initial serve
+  ballRespawning = false;
+  player2Ai = true;
+  respawnBall();
+}
+
 int main(int argc, char *argv[]) {
   // Initializations
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
-    std::cout << "SDL Video or Audio Initialization Failed";
+    std::cout << "SDL Video or Audio Initialization Failed\n" << SDL_GetError();
     return 1;
   }
   if (TTF_Init() != 0) {
-    std::cout << "TTF Initialization Failed";
+    std::cout << "TTF Initialization Failed\n" << TTF_GetError();
     return 1;
   }
   if (Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, 2, 2048) == -1) {
-    std::cout << "SDL Mixer Audio Initialization Failed";
+    std::cout << "SDL Mixer Audio Initialization Failed\n" << Mix_GetError();
     return 1;
   }
   srand(time(0));
@@ -220,24 +234,24 @@ int main(int argc, char *argv[]) {
   window = SDL_CreateWindow("Pong", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
     WINDOW_WIDTH, WINDOW_HEIGHT, 0);
   if (!window) {
-    std::cout << "SDL Window Creation Failed";
+    std::cout << "SDL Window Creation Failed\n" << SDL_GetError();
     return 1;
   }
   renderer = SDL_CreateRenderer(window, -1, 0);
   if (!renderer) {
-    std::cout << "SDL Renderer Creation Failed";
+    std::cout << "SDL Renderer Creation Failed\n" << SDL_GetError();
     return 1;
   }
   scoreFont = TTF_OpenFont(SCORE_FONT_LOCATION, 24);
   if (!scoreFont) {
-    std::cout << "Opening Font File " << SCORE_FONT_LOCATION << " Failed";
+    std::cout << "Opening Font File " << SCORE_FONT_LOCATION << " Failed\n" << TTF_GetError();
     return 1;
   }
   soundHitPaddle = Mix_LoadWAV(SFX_PADDLE_LOCATION);
   soundHitWall = Mix_LoadWAV(SFX_WALL_LOCATION);
   soundScore = Mix_LoadWAV(SFX_SCORE_LOCATION);
   if (soundHitPaddle == NULL || soundHitWall == NULL || soundScore == NULL) {
-    std::cout << "Loading WAV sound files Failed";
+    std::cout << "Loading WAV sound files Failed\n" << Mix_GetError();
     return 1;
   }
 
@@ -264,11 +278,7 @@ int main(int argc, char *argv[]) {
               gameRunning = false;
               break;
             case SDLK_r:
-              paddleLeft.score = 0;
-              paddleRight.score = 0;
-              leftSideServing = rand() % 2; // Random initial serve
-              ballRespawning = false;
-              respawnBall();
+              restartGame();
               break;
             case SDLK_w:
               paddleLeft.velocity = PADDLE_SPEED;
@@ -277,10 +287,10 @@ int main(int argc, char *argv[]) {
               paddleLeft.velocity = -PADDLE_SPEED;
               break;
             case SDLK_UP:
-              paddleRight.velocity = PADDLE_SPEED;
+              if (!player2Ai) paddleRight.velocity = PADDLE_SPEED;
               break;
             case SDLK_DOWN:
-              paddleRight.velocity = -PADDLE_SPEED;
+              if (!player2Ai) paddleRight.velocity = -PADDLE_SPEED;
               break;
           }
         } else if (event.type == SDL_KEYUP) {
@@ -291,6 +301,10 @@ int main(int argc, char *argv[]) {
               break;
             case SDLK_UP:
             case SDLK_DOWN:
+              if (!player2Ai) paddleRight.velocity = 0.0f;
+              break;
+            case SDLK_a:
+              player2Ai = !player2Ai;
               paddleRight.velocity = 0.0f;
               break;
           }
@@ -307,6 +321,16 @@ int main(int argc, char *argv[]) {
       }
 
       updatePaddlePosition(&paddleLeft, delta_time);
+      if (player2Ai) {
+        float rightPaddleBallVertDist = (paddleRight.rect.y + PADDLE_HEIGHT / 2) - (ball.rect.y + BALL_RADIUS);
+        if (ball.rect.y < 0) rightPaddleBallVertDist = 0.0f;
+        float speedMultAi = 0.7f;
+        if (abs(rightPaddleBallVertDist) > 3) {
+          paddleRight.velocity = speedMultAi * (rightPaddleBallVertDist > 1 ? PADDLE_SPEED : -PADDLE_SPEED);
+        } else {
+          paddleRight.velocity = 0.0f;
+        }
+      }
       updatePaddlePosition(&paddleRight, delta_time);
       updateBallPosition(delta_time);
 
@@ -329,11 +353,7 @@ int main(int argc, char *argv[]) {
               gameRunning = false;
               break;
             case SDLK_r:
-              paddleLeft.score = 0;
-              paddleRight.score = 0;
-              leftSideServing = rand() % 2; // Random initial serve
-              ballRespawning = false;
-              respawnBall();
+              restartGame();
               gameOver = false;
               break;
           }

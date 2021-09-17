@@ -10,12 +10,14 @@ Both players are bound by the screen and can only move vertically.
 The ball will bounce off the top and bottom edges of the screen and the players' paddles.
 A point is scored anytime a ball touches the left and right edges of the screen for the opposite side it hit.
 Player 1 is the left paddle and player 2 is the right paddle.
+Player 1 is always controlled by a human but player 2 can toggle between simple AI (default) and human control.
 
 **Controls:**
 | Button | Action |
 | ------ | ----- |
 | Esc | Quit |
 | R | Restart |
+| A | Toggle player 2 AI |
 
 **Player 1 Controls:**
 | Button | Action |
