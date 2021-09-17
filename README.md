@@ -1,18 +1,21 @@
 # Pong
-## Screenshots
-Just a placeholder for now, but here is a video of the original I am trying to clone
-[![IMAGE ALT TEXT](http://img.youtube.com/vi/fhd7FfGCdCo/0.jpg)](http://www.youtube.com/watch?v=fhd7FfGCdCo "Pong 1972 by Atari")
+![Pong GIF](play-pong.gif)
 
 ## Description
 A clone of the 1972 game for the Atari 2600: Pong. This was made in C++ using the SDL2 library.
-The main purpose of this project is to learn how to use SDL2 for simple 2D game development.
-The game will be one player against an AI or against another player locally.
+The main purpose of this project is to learn the intricacies of simple game development.
 
 ## Gameplay
 Both players are bound by the screen and can only move vertically.
 The ball will bounce off the top and bottom edges of the screen and the players' paddles.
 A point is scored anytime a ball touches the left and right edges of the screen for the opposite side it hit.
-Player 1 is the left paddle and player 2 or the AI is the right paddle.
+Player 1 is the left paddle and player 2 is the right paddle.
+
+**Controls:**
+| Button | Action |
+| ------ | ----- |
+| Esc | Quit |
+| R | Restart |
 
 **Player 1 Controls:**
 | Button | Action |
